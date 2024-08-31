@@ -8,10 +8,12 @@ import psycopg2
 from dotenv import load_dotenv
 import logging
 from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 load_dotenv()
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -57,11 +59,11 @@ def extract_user_ids(message):
     return re.findall(pattern, message)
 
 
-@app.route("/")
-def index():
+@app.route("/api/logs")
+def get_logs():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, encoded_message FROM message_logs")
+    cur.execute("SELECT id, encoded_message FROM message_logs ORDER BY id DESC")
     rows = cur.fetchall()
     logs = [{"id": row[0], **json.loads(row[1])} for row in rows]
     cur.close()
@@ -71,14 +73,9 @@ def index():
     for log in logs:
         if "message" in log:
             extracted_user_ids = extract_user_ids(log["message"])
-            logging.info(
-                f"Extracted user IDs from message '{log['message']}': {extracted_user_ids}"
-            )
             user_ids.update(extracted_user_ids)
 
-    # Fetch usernames asynchronously
     usernames = asyncio.run(fetch_usernames(user_ids))
-    logging.info(f"Fetched usernames: {usernames}")
 
     for log in logs:
         if "message" in log:
@@ -87,20 +84,24 @@ def index():
                     f"<@!?{user_id}>", f"@{username}", log["message"]
                 )
 
-    return render_template("index.html", logs=logs)
+    return jsonify(logs)
 
 
-@app.route("/new_entry", methods=["POST"])
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/new_entry", methods=["POST"])
 def new_entry():
-    # This endpoint can be used to add new entries to the database
     data = request.json
     message_data = data.get("message_data")
     log_message_to_db(message_data)
     socketio.emit("new_log", {"log": message_data})
-    return "New entry added", 200
+    return jsonify({"status": "success", "message": "New entry added"}), 200
 
 
-@app.route("/delete_all_logs", methods=["DELETE"])
+@app.route("/api/delete_all_logs", methods=["DELETE"])
 def delete_all_logs():
     conn = get_db_connection()
     cur = conn.cursor()
@@ -108,10 +109,10 @@ def delete_all_logs():
     conn.commit()
     cur.close()
     conn.close()
-    return "All logs deleted", 200
+    return jsonify({"status": "success", "message": "All logs deleted"}), 200
 
 
-@app.route("/delete_selected_logs", methods=["DELETE"])
+@app.route("/api/delete_selected_logs", methods=["DELETE"])
 def delete_selected_logs():
     data = request.json
     ids = data.get("ids")
@@ -121,7 +122,7 @@ def delete_selected_logs():
     conn.commit()
     cur.close()
     conn.close()
-    return "Selected logs deleted", 200
+    return jsonify({"status": "success", "message": "Selected logs deleted"}), 200
 
 
 def log_message_to_db(message_data):
@@ -137,4 +138,4 @@ def log_message_to_db(message_data):
 
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0")
+    socketio.run(app, host="0.0.0.0", port=5000)

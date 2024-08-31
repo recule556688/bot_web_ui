@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  web:
+    image: getkarma/bot_web:latest
+    ports:
+      - "7480:5000"
+    env_file:
+      - .env

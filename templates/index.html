@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Message Logs</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Roboto', sans-serif;
+            color: #333;
+        }
+        .container {
+            margin-top: 50px;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            margin-bottom: 30px;
+            color: #007bff;
+            font-weight: 700;
+        }
+        .table-responsive {
+            margin-top: 20px;
+        }
+        .table thead {
+            background-color: #007bff;
+            color: white;
+        }
+        .table tbody tr:hover {
+            background-color: #f1f1f1;
+        }
+        .table th, .table td {
+            text-align: center;
+            vertical-align: middle;
+            padding: 12px;
+        }
+        .table.custom-table {
+            border-collapse: collapse;
+        }
+        .table.custom-table th, .table.custom-table td {
+            border: 1px solid #ddd;
+        }
+        .hero {
+            background: linear-gradient(45deg, #007bff, #00d4ff);
+            color: white;
+            padding: 50px 0;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+        }
+        .hero p {
+            font-size: 24px;
+            font-weight: 400;
+        }
+        .attachment-img {
+            max-width: 100px;
+            max-height: 100px;
+            margin: 5px;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .page-item {
+            margin: 0 5px;
+        }
+        .page-item.active .page-link {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .attachment-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .hidden {
+            display: none;
+        }
+        .no-logs-message {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+            color: #888;
+        }
+        .log-checkbox {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="#">Message Logs</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="deleteAllLogs()">Delete All Logs</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="deleteSelectedLogs()">Delete Selected Logs</a>
+                </li>
+            </ul>
+            <form class="form-inline">
+                <input class="form-control mr-sm-2" type="search" placeholder="Search Logs" aria-label="Search" id="search-query">
+                <button class="btn btn-outline-success my-2 my-sm-0" type="button" onclick="searchLogs()">Search</button>
+            </form>
+        </div>
+    </nav>
+    <div class="hero">
+        <h1>Welcome to Tess Spy Agencie</h1>
+        <p><i></i>Know thy enemy and know yourself, in a hundred battles, you will never be defeated.</i></p>
+    </div>
+    <div class="container">
+        <h1 class="text-center">Message Logs</h1>
+        <div class="table-responsive">
+            <table class="table custom-table">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="select-all" class="log-checkbox" onclick="toggleSelectAll()"></th>
+                        <th class="user-header">User <i class="fas fa-user"></i></th>
+                        <th class="time-header">Time <i class="fas fa-clock"></i></th>
+                        <th class="message-header">Message <i class="fas fa-comment"></i></th>
+                        <th class="attachments-header">Attachments <i class="fas fa-paperclip"></i></th>
+                        <th class="guild-header">Guild <i class="fas fa-users"></i></th>
+                        <th class="channel-header">Channel <i class="fas fa-hashtag"></i></th>
+                    </tr>
+                </thead>
+                <tbody id="logs-body">
+                    <!-- Logs will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+            <p id="no-logs-message" class="no-logs-message hidden">No logs available</p>
+        </div>
+        <nav>
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be inserted here by JavaScript -->
+            </ul>
+        </nav>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        let logsData = {{ logs|tojson|safe }};
+        const logsPerPage = 5;
+        let currentPage = 1;
+        let filteredLogs = logsData;
+
+        function displayLogs(page, logs = filteredLogs) {
+            const startIndex = (page - 1) * logsPerPage;
+            const endIndex = startIndex + logsPerPage;
+            const paginatedLogs = logs.slice(startIndex, endIndex);
+
+            const logsBody = document.getElementById('logs-body');
+            logsBody.innerHTML = '';
+
+            if (logs.length === 0) {
+                document.getElementById('no-logs-message').classList.remove('hidden');
+            } else {
+                document.getElementById('no-logs-message').classList.add('hidden');
+                paginatedLogs.forEach(log => {
+                    const attachments = log.attachments && log.attachments !== "No attachments"
+                        ? log.attachments.map(url => `<a href="${url}" target="_blank"><img src="${url}" alt="Attachment" class="attachment-img"></a>`).join('')
+                        : 'No Attachments';
+
+                    const row = `
+                        <tr>
+                            <td><input type="checkbox" class="log-checkbox" data-id="${log.id}"></td>
+                            <td class="user-cell">${log.user || ''}</td>
+                            <td class="time-cell">${log.time || ''}</td>
+                            <td class="message-cell">${log.message || ''}</td>
+                            <td class="attachments-cell">${attachments}</td>
+                            <td class="guild-cell">${log.guild || ''}</td>
+                            <td class="channel-cell">${log.channel || ''}</td>
+                        </tr>
+                    `;
+
+                    logsBody.innerHTML += row;
+                });
+            }
+
+            toggleEmptyHeaders();
+        }
+
+        function toggleEmptyHeaders() {
+            const cells = document.querySelectorAll('td');
+            const headers = {
+                'user-cell': 'user-header',
+                'time-cell': 'time-header',
+                'message-cell': 'message-header',
+                'attachments-cell': 'attachments-header',
+                'guild-cell': 'guild-header',
+                'channel-cell': 'channel-header'
+            };
+
+            for (const cellClass in headers) {
+                const headerClass = headers[cellClass];
+                const hasContent = Array.from(cells).some(cell => cell.classList.contains(cellClass) && cell.innerText.trim() !== '');
+                document.querySelector(`.${headerClass}`).classList.toggle('hidden', !hasContent);
+            }
+        }
+
+        function displayPagination(logs = filteredLogs) {
+            const totalPages = Math.ceil(logs.length / logsPerPage);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            for (let i = 1; i <= totalPages; i++) {
+                const activeClass = i === currentPage ? 'active' : '';
+                const pageItem = `
+                    <li class="page-item ${activeClass}">
+                        <a class="page-link" href="#" onclick="goToPage(${i}, logs)">${i}</a>
+                    </li>
+                `;
+
+                pagination.innerHTML += pageItem;
+            }
+        }
+
+        function goToPage(page, logs = filteredLogs) {
+            currentPage = page;
+            displayLogs(page, logs);
+            displayPagination(logs);
+        }
+
+        function addNewLog(log) {
+            logsData.push(log);
+            filteredLogs = logsData; // Update filtered logs as well
+            displayLogs(currentPage);
+            displayPagination();
+        }
+
+        function searchLogs() {
+            const query = document.getElementById('search-query').value.toLowerCase();
+            filteredLogs = logsData.filter(log =>
+                (log.user && log.user.toLowerCase().includes(query)) ||
+                (log.message && log.message.toLowerCase().includes(query)) ||
+                (log.guild && log.guild.toLowerCase().includes(query)) ||
+                (log.channel && log.channel.toLowerCase().includes(query))
+            );
+
+            displayLogs(1, filteredLogs);
+            displayPagination(filteredLogs);
+        }
+
+        function deleteAllLogs() {
+            if (confirm("Are you sure you want to delete all logs?")) {
+                fetch('/delete_all_logs', { method: 'DELETE' })
+                    .then(response => response.ok && location.reload());
+            }
+        }
+
+        function deleteSelectedLogs() {
+            const selectedCheckboxes = document.querySelectorAll('.log-checkbox:checked');
+            const ids = Array.from(selectedCheckboxes).map(cb => cb.getAttribute('data-id'));
+
+            if (ids.length === 0) {
+                alert("Please select logs to delete.");
+                return;
+            }
+
+            if (confirm("Are you sure you want to delete selected logs?")) {
+                fetch('/delete_selected_logs', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ids })
+                })
+                .then(response => response.ok && location.reload());
+            }
+        }
+
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('select-all');
+            const checkboxes = document.querySelectorAll('.log-checkbox');
+            checkboxes.forEach(checkbox => checkbox.checked = selectAllCheckbox.checked);
+        }
+
+        // SocketIO setup
+        const socket = io();
+
+        socket.on('new_log', function(data) {
+            addNewLog(data.log);
+        });
+
+        displayLogs(currentPage);
+        displayPagination();
+    </script>
+</body>
+</html>
